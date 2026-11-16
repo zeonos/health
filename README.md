@@ -5,11 +5,11 @@ Dansk Android-app til en fælles tablet med lokale personprofiler. Kræver Andro
 ## Kom i gang
 
 1. Installér den signerede APK på tabletten, og åbn **Min Dag**. Giv filappen tilladelse til at installere APK'en, hvis Android beder om det.
-2. Opret én profil pr. person med en PIN-kode på 4–8 cifre. Slå menstruationsloggen til for de profiler, der ønsker den.
-3. Tilføj en Google-konto i Android, og slå kalendersynkronisering til. Giv Min Dag læseadgang, og vælg kalenderne for hver profil under **Indstillinger**.
+2. Opret én profil pr. person. Du kan vælge en PIN-kode på 4–8 cifre og slå menstruationsloggen til på den enkelte profil.
+3. Tilføj en Google-konto i Android, og slå kalendersynkronisering til. Giv Min Dag læseadgang, og vælg de fælles kalendere under **Indstillinger** på fællesoversigten.
 4. Vælg en fælles vejrby i **Indstillinger**. Appen henter prognoser fra Open-Meteo.
 
-Kropskortet har forside, bagside og nærbilleder af hoved og ryg. Smerter kan registreres flere gange om dagen med styrke, varighed, tidspunkt og note. Trivsel, søvn og menstruation kan registreres på tidligere datoer og redigeres i **Historik**. **Rapport** viser en valgt periode og gemmer den som PDF via Androids filvælger. Cyklus og noter tilvælges i rapporten.
+Kropskortet har forside, bagside og nærbilleder af hoved, ryg, hænder og fødder. Smerter kan registreres flere gange om dagen med styrke, varighed, tidspunkt og note. Trivsel, søvn og menstruation kan registreres på tidligere datoer og redigeres i **Historik**. Efter en gemt registrering åbner fællesoversigten med dagens vejr og aftaler. **Rapport** viser en valgt periode og gemmer den som PDF via Androids filvælger. Cyklus og noter tilvælges i rapporten.
 
 Hver profil har separat historik. Registreringerne gemmes lokalt og krypteres med en nøgle i Android Keystore. APK-opdateringer skal signeres med den samme nøgle for at kunne installeres oven på en eksisterende version. Afinstallation sletter de lokale data. Kalenderen læser aftaler fra Androids synkroniserede kalendere, og vejr kræver internet.
 

@@ -6,7 +6,7 @@
   var body = window.MinDagBody;
   var report = window.MinDagReport;
   var storage = load();
-  var active = null, page = 'profiles', unlock = null, editor = null;
+  var active = null, page = 'home', unlock = null, editor = null;
   var inactivity, toastTimer, lastAction = Date.now(), attempts = {};
   var calendar = {status:'pending'}, calendarRequest = 0;
   var weatherRequest = 0, citiesRequest = 0, weatherState = '', cityResults = [];
@@ -15,6 +15,7 @@
   var qualities = ['Meget dårlig','Dårlig','Middel','God','Meget god'];
   var activityLevels = ['Meget lav','Lav','Middel','Høj','Meget høj'];
   var labels = {pain:'Smerter', noPain:'Smerter', sleep:'Søvn', mood:'Trivsel', cycle:'Menstruation'};
+  var editorTitles = {pain:'Smerter',mood:'Trivsel',sleep:'Søvn',cycle:'Menstruation',noPain:'Ingen smerter'};
 
   function load() {
     try {
@@ -22,6 +23,12 @@
       if (android && !raw) throw new Error('storage');
       var saved = JSON.parse(raw || '{}');
       saved.profiles = saved.profiles || [];
+      if (!saved.calendars) {
+        var previous = saved.profiles.map(function (p) { return p.calendars || []; }).filter(function (ids) { return ids.length; });
+        saved.calendars = previous.length ? previous[0].filter(function (id) {
+          return previous.every(function (ids) { return ids.indexOf(id) >= 0; });
+        }) : [];
+      }
       return saved;
     } catch (error) { return {failed:true, profiles:[]}; }
   }
@@ -77,7 +84,10 @@
   function scale(name, values, current) {
     return select(name,[['','Vælg']].concat(values.map(function (v,i) { return [i+1,(i+1)+' · '+v]; })),current);
   }
-  function note(value) { return field('Note (valgfrit)','<textarea name="note" maxlength="600">'+esc(value)+'</textarea>'); }
+  function note(value) {
+    return '<details class="note" '+(value ? 'open' : '')+'><summary>Note (valgfrit)</summary>'+
+      '<textarea name="note" aria-label="Note" maxlength="600">'+esc(value)+'</textarea></details>';
+  }
   function showToast(text) {
     toast.textContent = text;
     toast.style.display = 'block';
@@ -86,11 +96,15 @@
   }
   function render() {
     var p = profile();
-    var nav = !p ? '' : '<nav aria-label="Navigation">'+[['I dag','today'],['Historik','history'],['Rapport','report'],['Indstillinger','settings']].map(function (entry) {
+    var compact = p && (page === 'edit' || page === 'pain' || page === 'area');
+    var nav = p ? '<nav aria-label="Navigation">'+[['Fælles overblik','home'],['Registrér','today'],['Historik','history'],['Rapport','report'],['Min profil','settings']].map(function (entry) {
       return button(entry[0],entry[1],'',page === entry[1] ? 'aria-current="page"' : '');
-    }).join('')+button(p.name+' · Skift','lock','profile')+'</nav>';
-    var content = p ? views[page](p) : profiles();
-    app.innerHTML = '<div class="shell"><header><div class="brand"><span class="logo" aria-hidden="true">☀</span>Min Dag</div>'+nav+'</header><main>'+content+'</main></div>';
+    }).join('')+'</nav>' : '<nav aria-label="Navigation">'+button('Fælles overblik','home','')+button('Indstillinger','sharedSettings','')+'</nav>';
+    var title = compact ? (page === 'area' ? 'Vælg smerteområde' : editorTitles[editor.type]) : '';
+    var top = compact ? '<header class="entry-header">'+button('‹ Tilbage','editorBack','')+'<h1>'+title+'</h1><span class="entry-person">'+esc(p.name)+'</span></header>'
+      : '<header><div class="brand"><span class="logo" aria-hidden="true">☀</span>Min Dag</div>'+nav+'</header>';
+    var content = views[page](p);
+    app.innerHTML = '<div class="shell'+(compact ? ' entry-shell' : '')+'">'+top+'<main>'+content+'</main></div>';
     drawBody();
   }
   function navigate(next) {
@@ -99,21 +113,19 @@
     if (next === 'report') reportOptions = {from:shift(today(),-6),to:today(),cycle:false,notes:false,area:''};
     render();
     window.scrollTo(0,0);
-    if (next === 'today' || next === 'settings') refreshCalendar();
-    if (next === 'today') refreshWeather(false);
+    if (next === 'home' || next === 'sharedSettings') refreshCalendar();
+    if (next === 'home') refreshWeather(false);
   }
   function lock() {
+    clearTimeout(inactivity);
     active = null;
     unlock = null;
     editor = null;
     reportOptions = null;
     reportText = '';
-    page = 'profiles';
-    calendar = {status:'pending'};
-    calendarRequest++;
     toast.style.display = 'none';
     toast.textContent = '';
-    render();
+    navigate('home');
   }
   function activity() {
     if (active && Date.now() - lastAction >= 300000) lock();
@@ -130,7 +142,7 @@
     var form = chosen
       ? '<h2>Åbn '+esc(chosen.name)+'</h2><form data-form="unlock">'+field('PIN',input('pin','password','','inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" required'))+'<button class="primary">Åbn profil</button></form>'
       : '<h2>Opret profil</h2><form data-form="profile">'+field('Navn',input('name','text','','maxlength="40" required'))+
-        field('PIN med 4–8 cifre',input('pin','password','','inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" required'))+
+        field('PIN med 4–8 cifre (valgfri)',input('pin','password','','inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8"'))+
         '<label class="field"><input type="checkbox" name="cycle">Vis menstruationslog</label><button class="primary">Opret profil</button></form>';
     return '<div class="screen"><h1>'+(list ? 'Vælg person' : 'Din dag begynder her')+'</h1>'+
       (list ? '<div class="card toolbar">'+list+button('Ny profil','newProfile','')+'</div>' : '')+
@@ -139,7 +151,6 @@
   function openProfile(p) {
     active = p.id;
     unlock = null;
-    calendar = {status:'pending'};
     lastAction = Date.now();
     activity();
     navigate('today');
@@ -153,40 +164,57 @@
       button(r ? 'Redigér' : 'Registrér',r ? 'editRecord' : type,'','data-id="'+(r ? esc(r.id) : '')+'"' )+'</section>';
   }
   function daily(p) {
-    var formatted = new Intl.DateTimeFormat('da-DK',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date());
     var records = p.records.filter(function (r) { return (r.type === 'pain' || r.type === 'noPain') && r.date === today(); });
     var list = records.map(function (r) {
       return '<li class="record"><span>'+esc((r.time ? r.time+' · ' : '')+report.describe(r))+'</span>'+button('Redigér','editRecord','','data-id="'+esc(r.id)+'"')+'</li>';
     }).join('');
-    return '<div class="hero"><div><p class="eyebrow">'+esc(formatted)+'</p><h1>I dag</h1><p class="muted">'+esc(p.name)+'</p></div></div>'+
-      '<div class="grid"><section class="card"><h2>Kropskort</h2>'+bodyCard(p)+
+    return '<div class="hero"><div><h1>Registrér</h1><p class="muted">'+esc(p.name)+'</p></div></div>'+
+      '<div class="grid"><section class="card"><h2>Kropskort</h2>'+bodyCard()+
       (list ? '<ul class="rows">'+list+'</ul>' : '')+'</section>'+
-      '<div class="stack"><section class="card weather" id="weather-card">'+weatherCard()+'</section><section class="card" id="agenda-card">'+agendaCard(p)+'</section>'+
-      '<div class="summaries">'+summary(p,'mood','Trivsel','mood','Hvordan har du det?')+
+      '<div class="stack">'+summary(p,'mood','Trivsel','mood','Hvordan har du det?')+
       summary(p,'sleep','Søvn','sleep','Hvordan sov du?')+
-      (p.cycle ? summary(p,'cycle','Menstruation','cycle','Registrér blødning og symptomer') : '')+'</div></div></div>';
+      (p.cycle ? summary(p,'cycle','Menstruation','cycle','Registrér blødning og symptomer') : '')+'</div></div>';
+  }
+  function home() {
+    if (storage.failed) return profiles();
+    var formatted = new Intl.DateTimeFormat('da-DK',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date());
+    var people = storage.profiles.map(function (p) {
+      return button(p.name,'unlock','','data-id="'+esc(p.id)+'"');
+    }).join('');
+    return '<div class="hero"><div><p class="eyebrow">'+esc(formatted)+'</p><h1>I dag</h1></div></div>'+
+      '<div class="grid"><section class="card" id="agenda-card">'+agendaCard()+'</section>'+
+      '<section class="card weather" id="weather-card">'+weatherCard()+'</section></div>'+
+      '<section class="card people"><h2>Registrér helbred</h2><div class="toolbar">'+people+
+      button('Ny profil','newProfile',people ? '' : 'primary')+'</div></section>';
   }
   function draft() {
-    if (!editor || editor.type !== 'pain') editor = {type:'pain',map:'full',front:true,area:'',score:0,date:today(),time:currentTime()};
+    if (!editor || editor.type !== 'pain') editor = {type:'pain',map:'full',front:true,area:'',score:0,date:today(),time:currentTime(),returnTo:'today'};
     return editor;
   }
-  function bodyCard(p) {
+  function bodyCard() {
     var d = draft();
-    var locations = body.areas(d.map,d.front).map(function (a) { return a.label; });
+    var locations = body.areas(d.map,d.front,d.part).map(function (a) { return a.label; });
     if (d.area && locations.indexOf(d.area) < 0) locations.push(d.area);
-    return '<div class="toolbar">'+button('Forside','front','','aria-pressed="'+(d.front && d.map !== 'back')+'"')+
-      button('Bagside','backside','','aria-pressed="'+(!d.front || d.map === 'back')+'"')+
+    var sides = d.map === 'hand' ? ['Håndflade','Håndryg'] : d.map === 'foot' ? ['Overside','Fodsål'] : ['Forside','Bagside'];
+    return '<div class="toolbar">'+button(sides[0],'front','','aria-pressed="'+(d.front && d.map !== 'back')+'"')+
+      button(sides[1],'backside','','aria-pressed="'+(!d.front || d.map === 'back')+'"')+
       (d.map !== 'full' ? button('Hele kroppen','fullBody','') : '')+'</div>'+
       '<div class="body-wrap"><canvas id="body" class="body-art" width="480" height="860" role="img" aria-label="Klikbart kropskort. Områder kan også vælges på listen."></canvas>'+
-      '<div class="body-control"><p class="eyebrow">'+(d.map === 'head' ? 'Hoved' : d.map === 'back' ? 'Ryg' : 'Vælg område')+'</p>'+
+      '<div class="body-control"><p class="eyebrow">'+esc(d.part || ({head:'Hoved',back:'Ryg'}[d.map] || 'Vælg område'))+'</p>'+
       field('Område',select('area',['Vælg område'].concat(locations),d.area).replace('<select','<select class="area-select"'))+
       '<small><span class="body-key"></span>Tryk på kortet eller vælg på listen.</small>'+
       '<div class="toolbar">'+button('Hoved','head','')+button('Ryg','backMap','')+'</div></div></div>'+
-      (d.area ? painForm(p,d) : '<div class="toolbar">'+button('Ingen smerter i dag','noPain','')+'</div>');
+      (page === 'today' ? '<div class="toolbar">'+button('Ingen smerter i dag','noPain','')+'</div>' : '');
   }
   function drawBody() {
     var canvas = document.getElementById('body');
-    if (canvas) body.draw(canvas,editor.map,editor.front,editor.area);
+    if (canvas) body.draw(canvas,editor.map,editor.front,editor.area,editor.part);
+  }
+  function areaView() {
+    return '<div class="screen"><section class="card">'+bodyCard()+'</section></div>';
+  }
+  function painView(p) {
+    return '<div class="screen"><section class="card">'+painForm(p,editor)+'</section></div>';
   }
   function painForm(p,d) {
     var faces = '';
@@ -194,15 +222,16 @@
       faces += '<button type="button" data-action="score" data-score="'+score+'" aria-pressed="'+(d.score === score)+
         '" aria-label="'+score+' af 10"><img alt="" src="faces/'+score+'.png">'+score+'</button>';
     }
-    return '<form class="pain-form" data-form="pain" id="pain-form"><h3>'+esc(d.area)+'</h3>'+
+    return '<form data-form="pain" id="pain-form"><div class="entry-line"><h2>'+esc(d.area)+'</h2>'+
+      button('Skift område','changeArea','')+'</div>'+
       '<div class="pain-scale" role="group" aria-label="Smerteintensitet">'+faces+'</div>'+
       '<div class="scale-caption"><small>1 · Meget mild smerte</small><small>10 · Værst tænkelige</small></div>'+
-      '<div class="cols">'+field('Dato',input('date','date',d.date,'required max="'+today()+'"'))+field('Klokkeslæt',input('time','time',d.time,'required'))+'</div>'+
+      '<div class="entry-fields"><div class="cols">'+field('Dato',input('date','date',d.date,'required max="'+today()+'"'))+field('Klokkeslæt',input('time','time',d.time,'required'))+'</div>'+
       '<div class="cols">'+field('Varighed i timer',input('hours','number',d.hours,'min="0" max="999" step="1"'))+
-      field('Minutter',input('minutes','number',d.minutes,'min="0" max="59" step="1"'))+'</div>'+
+      field('Minutter',input('minutes','number',d.minutes,'min="0" max="59" step="1"'))+'</div></div>'+
       '<label class="field"><input name="ongoing" type="checkbox" '+(d.ongoing ? 'checked' : '')+'>Smerten er stadig i gang</label>'+
       note(d.note)+'<div class="toolbar"><button class="primary" '+(!d.score ? 'disabled' : '')+'>Gem for '+esc(p.name)+'</button>'+
-      button('Annullér','cancelPain','')+(d.id ? button('Slet','deleteRecord','','data-id="'+esc(d.id)+'"') : '')+'</div></form>';
+      button('Annullér','editorBack','')+(d.id ? button('Slet','deleteRecord','','data-id="'+esc(d.id)+'"') : '')+'</div></form>';
   }
   function readPainDraft() {
     var form = document.getElementById('pain-form');
@@ -210,11 +239,18 @@
     ['date','time','hours','minutes','note'].forEach(function (name) { editor[name] = form.elements[name].value; });
     editor.ongoing = form.elements.ongoing.checked;
   }
-  function setMap(map, front) {
+  function setMap(map, front, part) {
     var d = draft();
     readPainDraft();
     d.map = map;
     d.front = front;
+    d.part = part || '';
+    if (map !== 'full' && page === 'today') {
+      page = 'area';
+      render();
+      window.scrollTo(0,0);
+      return;
+    }
     render();
   }
   function chooseArea(area) {
@@ -222,10 +258,13 @@
     readPainDraft();
     if (area === 'Hoved') return setMap('head', d.front);
     if (area === 'Ryg') return setMap('back', false);
+    if (/^(Venstre|Højre) hånd$/.test(area)) return setMap('hand', true, area);
+    if (/^(Venstre|Højre) fod$/.test(area)) return setMap('foot', true, area);
     if (area === 'Vælg område') return;
     d.area = area;
+    page = 'pain';
     render();
-    document.getElementById('pain-form').scrollIntoView();
+    window.scrollTo(0,0);
   }
   function scorePain(score) {
     editor.score = score;
@@ -237,13 +276,13 @@
   }
   function editorView(p) {
     var d = editor;
-    var title = {mood:'Trivsel',sleep:'Søvn',cycle:'Menstruation',noPain:'Ingen smerter'}[d.type];
-    var fields = field(d.type === 'sleep' ? 'Dato du vågnede' : 'Dato',input('date','date',d.date,'required max="'+today()+'"'));
-    if (d.type === 'mood') fields += field('Hvordan har du det?',scale('mood',moods,d.mood))+
-      field('Energi (valgfrit)',scale('energy',activityLevels,d.energy))+field('Stress (valgfrit)',scale('stress',activityLevels,d.stress));
-    if (d.type === 'sleep') fields += '<div class="cols">'+field('Timer du sov',input('hours','number',d.hours,'required min="0" max="24" step="1"'))+
-      field('Minutter',input('minutes','number',d.minutes,'min="0" max="59" step="1"'))+'</div>'+
-      field('Søvnkvalitet (valgfrit)',scale('quality',qualities,d.quality));
+    var date = field(d.type === 'sleep' ? 'Dato du vågnede' : 'Dato',input('date','date',d.date,'required max="'+today()+'"'));
+    var fields = date;
+    if (d.type === 'mood') fields = '<div class="cols">'+date+field('Hvordan har du det?',scale('mood',moods,d.mood))+
+      field('Energi (valgfrit)',scale('energy',activityLevels,d.energy))+field('Stress (valgfrit)',scale('stress',activityLevels,d.stress))+'</div>';
+    if (d.type === 'sleep') fields = '<div class="cols">'+date+field('Søvnkvalitet (valgfrit)',scale('quality',qualities,d.quality))+
+      field('Timer du sov',input('hours','number',d.hours,'required min="0" max="24" step="1"'))+
+      field('Minutter',input('minutes','number',d.minutes,'min="0" max="59" step="1"'))+'</div>';
     if (d.type === 'cycle') {
       var starts = report.cycleStarts(p);
       var last = starts[starts.length - 1];
@@ -258,8 +297,8 @@
         field('Andre symptomer (valgfrit)',input('symptoms','text',d.symptoms,'maxlength="120" placeholder="Fx kvalme eller oppustethed"'))+
         '<p class="muted">Smerter som kramper og hovedpine kan registreres på kropskortet på samme dato.</p>';
     }
-    return '<div class="screen"><h1>'+title+'</h1><section class="card"><form data-form="record">'+fields+note(d.note)+
-      '<div class="toolbar"><button class="primary">Gem for '+esc(p.name)+'</button>'+button('Annullér',d.returnTo,'')+
+    return '<div class="screen"><section class="card"><form data-form="record">'+fields+note(d.note)+
+      '<div class="toolbar"><button class="primary">Gem for '+esc(p.name)+'</button>'+button('Annullér','editorBack','')+
       (d.id ? button('Slet','deleteRecord','','data-id="'+esc(d.id)+'"') : '')+'</div></form></section></div>';
   }
   function startEditor(type) {
@@ -281,12 +320,10 @@
       }
       editor.map = 'full';
       editor.front = true;
-      page = 'today';
+      page = 'pain';
     } else page = 'edit';
     render();
-    var form = document.getElementById('pain-form');
-    if (form) form.scrollIntoView();
-    else window.scrollTo(0,0);
+    window.scrollTo(0,0);
   }
   function recordFromForm(form) {
     var p = profile();
@@ -326,7 +363,7 @@
       p.records = p.records.filter(function (item) { return item.id !== r.id && (!duplicate || item.id !== duplicate.id); });
       p.records.push(r);
     })) {
-      navigate(d.returnTo || 'today');
+      lock();
       showToast('Gemt for '+p.name);
     }
   }
@@ -370,29 +407,33 @@
   }
   function settings(p) {
     return '<div class="screen"><h1>Indstillinger</h1><section class="card"><h2>'+esc(p.name)+'</h2>'+
-      '<label class="field"><input id="profile-cycle" type="checkbox" '+(p.cycle ? 'checked' : '')+'>Vis menstruationslog på forsiden</label></section>'+
-      '<section class="card"><h2>Vejrby</h2><p class="muted">'+(storage.city ? 'Valgt by · '+esc(storage.city.label) : 'Vælg en by til dagens vejr.')+'</p>'+
+      '<label class="field"><input id="profile-cycle" type="checkbox" '+(p.cycle ? 'checked' : '')+'>Vis menstruationslog</label>'+
+      '<form data-form="pin">'+field('Ny PIN med 4–8 cifre',input('pin','password','','inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" required'))+
+      '<div class="toolbar"><button class="primary">Gem PIN</button>'+(p.pin ? button('Fjern PIN','removePin','') : '')+'</div></form></section></div>';
+  }
+  function sharedSettings() {
+    return '<div class="screen"><h1>Fælles indstillinger</h1><section class="card"><h2>Vejrby</h2><p class="muted">'+(storage.city ? 'Valgt by · '+esc(storage.city.label) : 'Vælg en by til dagens vejr.')+'</p>'+
       '<form data-form="city"><div class="toolbar">'+input('city','search','','minlength="2" maxlength="80" required aria-label="Bynavn" placeholder="Fx Aarhus"')+
       '<button class="primary">Find by</button></div></form><div id="city-results" aria-live="polite"></div></section>'+
-      '<section class="card" id="calendar-settings">'+calendarSettings(p)+'</section></div>';
+      '<section class="card" id="calendar-settings">'+calendarSettings()+'</section></div>';
   }
-  function calendarSettings(p) {
-    if (calendar.status !== 'ok') return agendaCard(p);
+  function calendarSettings() {
+    if (calendar.status !== 'ok') return agendaCard();
     var checkboxes = calendar.calendars.map(function (c) {
-      return '<label class="field"><input type="checkbox" name="calendar" value="'+esc(c.id)+'" '+(p.calendars.indexOf(c.id) >= 0 ? 'checked' : '')+
+      return '<label class="field"><input type="checkbox" name="calendar" value="'+esc(c.id)+'" '+(storage.calendars.indexOf(c.id) >= 0 ? 'checked' : '')+
         '>'+esc(c.name)+(c.account ? ' · '+esc(c.account) : '')+'</label>';
     }).join('');
-    return '<h2>Kalendere for '+esc(p.name)+'</h2>'+
+    return '<h2>Fælles kalendere</h2>'+
       (checkboxes ? checkboxes : '<p>Tabletten har endnu ingen synkroniserede kalendere. Tilføj Google-kontoen i Androids indstillinger.</p>');
   }
-  function agendaCard(p) {
+  function agendaCard() {
     var heading = '<h2>Kommende aftaler</h2>';
     if (!android) return heading+'<p>Kalenderen vises i Android-appen.</p>';
     if (calendar.status === 'pending') return heading+'<p>Henter kalender …</p>';
     if (calendar.status === 'permission') return heading+'<p>Giv Min Dag adgang til at læse kalenderne på tabletten.</p>'+
       button('Giv kalenderadgang','calendarPermission','');
     if (calendar.status !== 'ok') return heading+'<p>Kalenderen kunne ikke læses.</p>'+button('Prøv igen','reloadCalendar','');
-    if (!p.calendars.length) return heading+'<p>Vælg hvilke Google-kalendere der vises for '+esc(p.name)+'.</p>'+button('Vælg kalendere','settings','');
+    if (!storage.calendars.length) return heading+'<p>Vælg hvilke Google-kalendere der vises på det fælles overblik.</p>'+button('Vælg kalendere','sharedSettings','');
     var now = Date.now();
     var events = calendar.events.filter(function (event) {
       if (event.allDay) return new Date(event.end).toISOString().slice(0,10) > today();
@@ -407,11 +448,10 @@
     }).join('')+'</ul>'+button('Opdatér','reloadCalendar','');
   }
   function refreshCalendar() {
-    var p = profile();
-    if (!p || !android) return;
+    if (!android || storage.failed) return;
     var start = new Date(today()+'T00:00:00').getTime();
     var end = new Date(shift(today(),7)+'T00:00:00').getTime();
-    android.calendar(start - 86400000,end,JSON.stringify(p.calendars),++calendarRequest);
+    android.calendar(start - 86400000,end,JSON.stringify(storage.calendars),++calendarRequest);
   }
   function updateCard(card, html) {
     var element = document.getElementById(card);
@@ -421,7 +461,7 @@
     var city = storage.city;
     var data = storage.forecast;
     var heading = '<div class="weather-top"><h2>Vejret i dag</h2><span class="eyebrow">'+esc(city && city.label)+'</span></div>';
-    if (!city) return heading+'<p>Vælg en by for at se dagens vejr.</p>'+button('Vælg by','settings','');
+    if (!city) return heading+'<p>Vælg en by for at se dagens vejr.</p>'+button('Vælg by','sharedSettings','');
     if (!data || data.day !== today()) return heading+'<p>'+(weatherState === 'loading' ? 'Henter prognose …' : 'Ingen tilgængelig prognose for i dag.')+'</p>'+
       button('Opdatér vejr','reloadWeather','');
     var places = {0:'Klart',1:'Mest klart',2:'Delvist skyet',3:'Overskyet',45:'Tåge',48:'Rimtåge'};
@@ -450,18 +490,52 @@
     }).catch(function () { callback(request,'{"error":true}'); });
   }
 
-  var views = {today:daily,edit:editorView,history:history,report:reportView,settings:settings};
+  function selectProfile(el) {
+    var chosen = storage.profiles.find(function (p) { return p.id === el.dataset.id; });
+    if (!chosen) return;
+    if (!chosen.pin) return openProfile(chosen);
+    unlock = chosen.id;
+    navigate('profiles');
+    app.querySelector('[name=pin]').focus();
+  }
+  function editorBack() {
+    if (page === 'area' && editor.area) {
+      page = 'pain';
+      render();
+      window.scrollTo(0,0);
+      return;
+    }
+    navigate(editor.returnTo || 'today');
+  }
+  function setPin(value) {
+    var pin = value && android ? android.createPin(value) : value;
+    if (value && !pin) return showToast('PIN kunne ikke gemmes.');
+    var p = profile();
+    if (save(function () { p.pin = pin; })) {
+      render();
+      showToast(pin ? 'PIN gemt.' : 'PIN fjernet.');
+    }
+  }
+  var views = {home:home,profiles:profiles,sharedSettings:sharedSettings,today:daily,edit:editorView,
+    pain:painView,area:areaView,history:history,report:reportView,settings:settings};
   var actions = {
+    home:lock, sharedSettings:function () { navigate('sharedSettings'); },
     today:function () { navigate('today'); }, history:function () { navigate('history'); },
     report:function () { navigate('report'); }, settings:function () { navigate('settings'); },
-    lock:lock, newProfile:function () { unlock = null; render(); },
-    unlock:function (el) { unlock = el.dataset.id; render(); app.querySelector('[name=pin]').focus(); },
-    front:function () { setMap(editor.map === 'back' ? 'full' : editor.map,true); },
-    backside:function () { setMap(editor.map,false); },
+    newProfile:function () { unlock = null; navigate('profiles'); },
+    unlock:selectProfile, removePin:function () { setPin(''); },
+    front:function () { setMap(editor.map === 'back' ? 'full' : editor.map,true,editor.part); },
+    backside:function () { setMap(editor.map,false,editor.part); },
     fullBody:function () { setMap('full',editor.front); },
     head:function () { setMap('head',editor.front); }, backMap:function () { setMap('back',false); },
     score:function (el) { scorePain(Number(el.dataset.score)); },
-    cancelPain:function () { navigate(editor.returnTo || 'today'); },
+    editorBack:editorBack,
+    changeArea:function () {
+      readPainDraft();
+      page = 'area';
+      render();
+      window.scrollTo(0,0);
+    },
     noPain:function () { startEditor('noPain'); }, mood:function () { startEditor('mood'); },
     sleep:function () { startEditor('sleep'); }, cycle:function () { startEditor('cycle'); },
     editRecord:function (el) { editRecord(el.dataset.id); },
@@ -499,7 +573,7 @@
     activity();
     if (!app.contains(event.target)) return;
     if (event.target.id === 'body') {
-      var zone = body.choose(event.target,event,editor.map,editor.front);
+      var zone = body.choose(event.target,event,editor.map,editor.front,editor.part);
       if (zone) chooseArea(zone);
       return;
     }
@@ -515,7 +589,7 @@
     }
     if (el.name === 'calendar') {
       var ids = Array.prototype.map.call(app.querySelectorAll('[name=calendar]:checked'),function (box) { return box.value; });
-      if (save(function () { p.calendars = ids; })) refreshCalendar();
+      if (save(function () { storage.calendars = ids; })) refreshCalendar();
       else el.checked = !el.checked;
     }
     if (page === 'report') updateReport();
@@ -527,9 +601,9 @@
       case 'profile':
         var name = e.name.value.trim();
         if (!name) return showToast('Skriv et navn.');
-        var pin = android ? android.createPin(e.pin.value) : e.pin.value;
-        if (!pin) return showToast('PIN kunne ikke gemmes.');
-        var p = {id:id(),name:name,pin:pin,records:[],calendars:[],cycle:e.cycle.checked};
+        var pin = e.pin.value && android ? android.createPin(e.pin.value) : e.pin.value;
+        if (e.pin.value && !pin) return showToast('PIN kunne ikke gemmes.');
+        var p = {id:id(),name:name,pin:pin,records:[],cycle:e.cycle.checked};
         if (save(function () { storage.profiles.push(p); })) openProfile(p);
         break;
       case 'unlock':
@@ -546,6 +620,7 @@
         }
         break;
       case 'pain': case 'record': recordFromForm(form); break;
+      case 'pin': setPin(e.pin.value); break;
       case 'city':
         var query = e.city.value.trim();
         if (query.length < 2) return showToast('Skriv mindst to bogstaver.');
@@ -557,14 +632,13 @@
     }
   });
   window.minDagCalendar = function (request,json) {
-    var p = profile();
-    if (request !== calendarRequest || !p) return;
+    if (request !== calendarRequest) return;
     calendar = JSON.parse(json);
-    updateCard('agenda-card',agendaCard(p));
-    updateCard('calendar-settings',calendarSettings(p));
+    updateCard('agenda-card',agendaCard());
+    updateCard('calendar-settings',calendarSettings());
   };
   window.minDagCities = function (request,json) {
-    if (request !== citiesRequest || page !== 'settings') return;
+    if (request !== citiesRequest || page !== 'sharedSettings') return;
     var data = JSON.parse(json);
     cityResults = (data.results || []).map(function (r) {
       return {label:[r.name,r.admin1,r.country].filter(Boolean).filter(function (v,i,a) { return a.indexOf(v) === i; }).join(', '),
@@ -596,14 +670,14 @@
   window.minDagLock = lock;
   window.minDagResume = function () {
     activity();
-    if (page === 'today') { refreshCalendar(); refreshWeather(false); }
+    if (page === 'home') { refreshCalendar(); refreshWeather(false); }
   };
   window.minDagBack = function () {
     if (!active) return lock();
-    if (page === 'edit' || (page === 'today' && editor && editor.area)) return navigate(editor.returnTo || 'today');
+    if (page === 'edit' || page === 'pain' || page === 'area') return editorBack();
     if (page !== 'today') return navigate('today');
     lock();
   };
   window.addEventListener('focus',window.minDagResume);
-  render();
+  navigate('home');
 }());

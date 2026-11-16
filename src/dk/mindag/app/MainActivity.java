@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.content.res.AssetManager;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -31,6 +32,7 @@ import javax.net.ssl.HttpsURLConnection;
 
 public final class MainActivity extends Activity {
     private static final String KEY = "min-dag-storage";
+    private static final String ASSET_HOST = "appassets.androidplatform.net";
     private final ExecutorService worker = Executors.newFixedThreadPool(2);
     private WebView web;
     private String pendingReport;
@@ -47,15 +49,43 @@ public final class MainActivity extends Activity {
         web.getSettings().setAllowContentAccess(false);
         web.getSettings().setAllowFileAccess(false);
         web.setWebChromeClient(new WebChromeClient());
-        web.setWebViewClient(new LocalPageOnly());
+        web.setWebViewClient(new LocalPageOnly(getAssets()));
         web.addJavascriptInterface(new Bridge(), "MinDagAndroid");
         setContentView(web);
-        web.loadUrl("file:///android_asset/index.html");
+        web.loadUrl("https://" + ASSET_HOST + "/index.html");
     }
 
     private static final class LocalPageOnly extends WebViewClient {
+        private final AssetManager assets;
+
+        LocalPageOnly(AssetManager assets) { this.assets = assets; }
+
         @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return true; }
         @Override public boolean shouldOverrideUrlLoading(WebView view, String url) { return true; }
+
+        @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            Uri url = request.getUrl();
+            String path = url.getPath();
+            if ("https".equals(url.getScheme()) && ASSET_HOST.equals(url.getHost()) && path != null) {
+                String mime = assetMime(path);
+                if (mime != null) {
+                    try {
+                        return new WebResourceResponse(mime, mime.equals("image/png") ? null : "UTF-8",
+                            assets.open(path.substring(1)));
+                    } catch (IOException missing) { /* Return an empty response below. */ }
+                }
+            }
+            return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", null,
+                new ByteArrayInputStream(new byte[0]));
+        }
+
+        private static String assetMime(String path) {
+            if (path.equals("/index.html")) return "text/html";
+            if (path.equals("/style.css")) return "text/css";
+            if (path.equals("/app.js") || path.equals("/body.js") || path.equals("/report.js")) return "text/javascript";
+            if (path.matches("/faces/([1-9]|10)\\.png")) return "image/png";
+            return null;
+        }
     }
 
     @Override public void onBackPressed() { evaluate("window.minDagBack()"); }
