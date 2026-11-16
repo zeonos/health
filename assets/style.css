@@ -21,7 +21,10 @@ nav{display:flex;align-items:center;flex-wrap:wrap;margin:-3px}nav button{backgr
 .cols{display:grid;grid-template-columns:1fr 1fr;grid-gap:12px}.error{color:#8b3032}.rows{list-style:none;padding:0;margin:8px 0}.rows li{border-top:1px solid var(--line);padding:9px 0;overflow-wrap:break-word}.rows .record{display:flex;align-items:center;justify-content:space-between}.record button{margin-left:8px}
 .screen{max-width:790px;margin:auto}.screen h1{margin-bottom:18px}.screen>.card+.card{margin-top:12px}.reading{white-space:pre-wrap;overflow-wrap:break-word}.banner{background:var(--mint);padding:10px;border-radius:10px;margin:8px 0}
 #toast{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);width:max-content;max-width:90%;background:var(--teal);color:white;border-radius:10px;padding:10px 17px;z-index:5;display:none}
-.people{margin-top:14px}
+.home-hero{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-gap:14px;align-items:center}
+.people{padding:12px 16px}
+.people h2{font-size:17px;margin-bottom:4px}
+.people button{max-width:calc(100% - 8px);overflow-wrap:break-word}
 .entry-shell{max-width:940px;padding-bottom:18px}
 .entry-header{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;min-height:56px;padding:5px 0;margin-bottom:8px}
 .entry-header h1{font:650 22px/1.2 system-ui,Arial,sans-serif;letter-spacing:0;margin:0 10px}
@@ -35,10 +38,16 @@ nav{display:flex;align-items:center;flex-wrap:wrap;margin:-3px}nav button{backgr
 .entry-line{display:flex;align-items:center;justify-content:space-between}
 .entry-line h2{margin:0 8px 0 0}
 .entry-fields{margin-top:6px}
+.time-field{border:0;padding:0;min-width:0}
+.time-field legend{padding:0}
+.clock-fields{display:flex;align-items:center}
+.clock-fields select{flex:1;min-width:0;width:auto;padding:8px 4px}
+.clock-fields span{margin:0 4px}
 .note{margin:6px 0}
 .note summary{width:max-content;max-width:100%;min-height:44px;padding:10px 0;cursor:pointer;color:var(--muted)}
 @media(min-width:680px){.entry-fields{display:grid;grid-template-columns:1fr 1fr;grid-gap:12px}}
 @media(max-width:540px){.pain-scale{grid-template-columns:repeat(5,minmax(0,1fr))}.entry-header h1{font-size:18px}.entry-header button{padding:6px 9px}}
 @media(max-width:730px){.shell{padding:0 13px 26px}header{align-items:flex-start;flex-direction:column;padding:11px 0;min-height:0;margin-bottom:16px}nav{margin-top:5px}.grid{grid-template-columns:1fr}.card{padding:14px}.hero{margin-bottom:14px}.body-art{max-width:200px}.summaries{grid-template-columns:1fr 1fr}}
+@media(max-width:540px){.home-hero{grid-template-columns:1fr}}
 @media(max-width:420px){.summaries{grid-template-columns:1fr}.cols{grid-template-columns:1fr}}
 @media print{header,.report-controls,#toast{display:none!important}.card{border:0}.shell{padding:0}body{background:white}.screen h1{font-size:25pt}}

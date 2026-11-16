@@ -23,6 +23,7 @@ $jar = if ($JavaBin) { Join-Path $JavaBin 'jar.exe' } else { 'jar.exe' }
 $java = if ($JavaBin) { Join-Path $JavaBin 'java.exe' } else { 'java.exe' }
 $env:JAVA_HOME = Split-Path -Parent (Split-Path -Parent (Get-Command $javac).Source)
 $build = New-Item -ItemType Directory -Force (Join-Path $PSScriptRoot 'build')
+$appAssets = New-Item -ItemType Directory -Force (Join-Path $build.FullName 'app-assets')
 $classes = New-Item -ItemType Directory -Force (Join-Path $build.FullName 'classes')
 $dex = New-Item -ItemType Directory -Force (Join-Path $build.FullName 'dex')
 $res = Join-Path $build.FullName 'resources.zip'
@@ -31,9 +32,19 @@ $unsigned = Join-Path $build.FullName 'unsigned.apk'
 $aligned = Join-Path $build.FullName 'aligned.apk'
 $signingKey = Join-Path $build.FullName 'min-dag-local.jks'
 
+# Embed the PNGs in the script so the WebView does not need to fetch each icon.
+Get-ChildItem -LiteralPath 'assets' -File | Copy-Item -Destination $appAssets.FullName -Force
+$faceImages = @(1..10 | ForEach-Object {
+    $face = Resolve-Path -LiteralPath "assets/faces/$_.png"
+    'data:image/png;base64,' + [Convert]::ToBase64String([IO.File]::ReadAllBytes($face.Path))
+})
+$prelude = 'window.MinDagFaceImages = ' + (ConvertTo-Json -InputObject $faceImages -Compress) + ";`n"
+$appScript = Join-Path $appAssets.FullName 'app.js'
+[IO.File]::WriteAllText($appScript, ($prelude + [IO.File]::ReadAllText($appScript)))
+
 $aapt = Join-Path $BuildTools 'aapt2.exe'
 Run $aapt @('compile','--dir','res','-o',$res)
-Run $aapt @('link','-I',$PlatformJar,'--manifest','AndroidManifest.xml','-A','assets','-o',$unsigned,$res)
+Run $aapt @('link','-I',$PlatformJar,'--manifest','AndroidManifest.xml','-A',$appAssets.FullName,'-o',$unsigned,$res)
 $sources = @(Get-ChildItem -LiteralPath 'src' -Recurse -Filter '*.java' | ForEach-Object FullName)
 $javacArguments = @('-encoding','UTF-8','--release','8','-classpath',$PlatformJar,'-d',$classes.FullName) + $sources
 Run $javac $javacArguments

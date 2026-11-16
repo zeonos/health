@@ -7,6 +7,7 @@
   var report = window.MinDagReport;
   var storage = load();
   var active = null, page = 'home', unlock = null, editor = null;
+  var inactiveAfter = 2 * 60 * 1000;
   var inactivity, toastTimer, lastAction = Date.now(), attempts = {};
   var calendar = {status:'pending'}, calendarRequest = 0;
   var weatherRequest = 0, citiesRequest = 0, weatherState = '', cityResults = [];
@@ -74,8 +75,8 @@
   function input(name,type,value,attributes) {
     return '<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+(attributes || '')+'>';
   }
-  function select(name, options, current) {
-    return '<select name="'+name+'">'+options.map(function (option) {
+  function select(name, options, current, attributes) {
+    return '<select name="'+name+'" '+(attributes || '')+'>'+options.map(function (option) {
       var value = Array.isArray(option) ? option[0] : option;
       var label = Array.isArray(option) ? option[1] : option;
       return '<option value="'+esc(value)+'"'+(String(current) === String(value) ? ' selected' : '')+'>'+esc(label)+'</option>';
@@ -128,10 +129,10 @@
     navigate('home');
   }
   function activity() {
-    if (active && Date.now() - lastAction >= 300000) lock();
+    if (active && Date.now() - lastAction >= inactiveAfter) lock();
     lastAction = Date.now();
     clearTimeout(inactivity);
-    if (active) inactivity = setTimeout(lock,300000);
+    if (active) inactivity = setTimeout(lock,inactiveAfter);
   }
   function profiles() {
     if (storage.failed) return '<div class="screen"><h1>Min Dag</h1><p class="error">Data kunne ikke læses. Luk appen, og prøv at åbne den igen.</p></div>';
@@ -181,11 +182,11 @@
     var people = storage.profiles.map(function (p) {
       return button(p.name,'unlock','','data-id="'+esc(p.id)+'"');
     }).join('');
-    return '<div class="hero"><div><p class="eyebrow">'+esc(formatted)+'</p><h1>I dag</h1></div></div>'+
-      '<div class="grid"><section class="card" id="agenda-card">'+agendaCard()+'</section>'+
-      '<section class="card weather" id="weather-card">'+weatherCard()+'</section></div>'+
+    return '<div class="hero home-hero"><div><p class="eyebrow">'+esc(formatted)+'</p><h1>I dag</h1></div>'+
       '<section class="card people"><h2>Registrér helbred</h2><div class="toolbar">'+people+
-      button('Ny profil','newProfile',people ? '' : 'primary')+'</div></section>';
+      button('Ny profil','newProfile',people ? '' : 'primary')+'</div></section></div>'+
+      '<div class="grid"><section class="card" id="agenda-card">'+agendaCard()+'</section>'+
+      '<section class="card weather" id="weather-card">'+weatherCard()+'</section></div>';
   }
   function draft() {
     if (!editor || editor.type !== 'pain') editor = {type:'pain',map:'full',front:true,area:'',score:0,date:today(),time:currentTime(),returnTo:'today'};
@@ -216,17 +217,27 @@
   function painView(p) {
     return '<div class="screen"><section class="card">'+painForm(p,editor)+'</section></div>';
   }
+  function clockField(time) {
+    var parts = time.split(':');
+    var hours = Array.from({length:24},function (_, index) { return pad(index); });
+    var minutes = Array.from({length:60},function (_, index) { return pad(index); });
+    return '<fieldset class="field time-field"><legend>Klokkeslæt</legend><div class="clock-fields">'+
+      select('clockHour',hours,parts[0],'aria-label="Time (00–23)"')+'<span aria-hidden="true">:</span>'+
+      select('clockMinute',minutes,parts[1],'aria-label="Minut (00–59)"')+'</div></fieldset>';
+  }
+  function clockValue(elements) { return elements.clockHour.value+':'+elements.clockMinute.value; }
   function painForm(p,d) {
     var faces = '';
     for (var score = 1; score <= 10; score++) {
+      var image = window.MinDagFaceImages ? window.MinDagFaceImages[score-1] : 'faces/'+score+'.png';
       faces += '<button type="button" data-action="score" data-score="'+score+'" aria-pressed="'+(d.score === score)+
-        '" aria-label="'+score+' af 10"><img alt="" src="faces/'+score+'.png">'+score+'</button>';
+        '" aria-label="'+score+' af 10"><img alt="" src="'+image+'">'+score+'</button>';
     }
     return '<form data-form="pain" id="pain-form"><div class="entry-line"><h2>'+esc(d.area)+'</h2>'+
       button('Skift område','changeArea','')+'</div>'+
       '<div class="pain-scale" role="group" aria-label="Smerteintensitet">'+faces+'</div>'+
       '<div class="scale-caption"><small>1 · Meget mild smerte</small><small>10 · Værst tænkelige</small></div>'+
-      '<div class="entry-fields"><div class="cols">'+field('Dato',input('date','date',d.date,'required max="'+today()+'"'))+field('Klokkeslæt',input('time','time',d.time,'required'))+'</div>'+
+      '<div class="entry-fields"><div class="cols">'+field('Dato',input('date','date',d.date,'required max="'+today()+'"'))+clockField(d.time)+'</div>'+
       '<div class="cols">'+field('Varighed i timer',input('hours','number',d.hours,'min="0" max="999" step="1"'))+
       field('Minutter',input('minutes','number',d.minutes,'min="0" max="59" step="1"'))+'</div></div>'+
       '<label class="field"><input name="ongoing" type="checkbox" '+(d.ongoing ? 'checked' : '')+'>Smerten er stadig i gang</label>'+
@@ -236,7 +247,8 @@
   function readPainDraft() {
     var form = document.getElementById('pain-form');
     if (!form) return;
-    ['date','time','hours','minutes','note'].forEach(function (name) { editor[name] = form.elements[name].value; });
+    ['date','hours','minutes','note'].forEach(function (name) { editor[name] = form.elements[name].value; });
+    editor.time = clockValue(form.elements);
     editor.ongoing = form.elements.ongoing.checked;
   }
   function setMap(map, front, part) {
@@ -333,7 +345,7 @@
     if (!r.date || r.date > today()) return showToast('Vælg en dato frem til i dag.');
     if (d.type === 'pain') {
       if (!d.score || !d.area) return showToast('Vælg område og smertestyrke.');
-      r.area = d.area; r.score = d.score; r.time = elements.time.value;
+      r.area = d.area; r.score = d.score; r.time = clockValue(elements);
       r.ongoing = elements.ongoing.checked;
       var total = Number(elements.hours.value) * 60 + Number(elements.minutes.value);
       r.minutes = !r.ongoing && total ? total : null;
@@ -363,7 +375,8 @@
       p.records = p.records.filter(function (item) { return item.id !== r.id && (!duplicate || item.id !== duplicate.id); });
       p.records.push(r);
     })) {
-      lock();
+      activity();
+      if (active) navigate('today');
       showToast('Gemt for '+p.name);
     }
   }
@@ -581,6 +594,9 @@
     if (trigger && app.contains(trigger) && actions[trigger.dataset.action]) actions[trigger.dataset.action](trigger);
   });
   app.addEventListener('input',activity);
+  app.addEventListener('keydown',activity);
+  app.addEventListener('wheel',activity,{passive:true});
+  app.addEventListener('touchmove',activity,{passive:true});
   app.addEventListener('change',function (event) {
     var el = event.target, p = profile();
     if (el.classList.contains('area-select')) chooseArea(el.value);

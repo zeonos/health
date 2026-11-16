@@ -65,13 +65,13 @@ public final class MainActivity extends Activity {
 
         @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             Uri url = request.getUrl();
+            if ("data".equals(url.getScheme())) return null;
             String path = url.getPath();
             if ("https".equals(url.getScheme()) && ASSET_HOST.equals(url.getHost()) && path != null) {
                 String mime = assetMime(path);
                 if (mime != null) {
                     try {
-                        return new WebResourceResponse(mime, mime.equals("image/png") ? null : "UTF-8",
-                            assets.open(path.substring(1)));
+                        return new WebResourceResponse(mime, "UTF-8", assets.open(path.substring(1)));
                     } catch (IOException missing) { /* Return an empty response below. */ }
                 }
             }
@@ -83,7 +83,6 @@ public final class MainActivity extends Activity {
             if (path.equals("/index.html")) return "text/html";
             if (path.equals("/style.css")) return "text/css";
             if (path.equals("/app.js") || path.equals("/body.js") || path.equals("/report.js")) return "text/javascript";
-            if (path.matches("/faces/([1-9]|10)\\.png")) return "image/png";
             return null;
         }
     }

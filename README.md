@@ -9,7 +9,7 @@ Dansk Android-app til en fælles tablet med lokale personprofiler. Kræver Andro
 3. Tilføj en Google-konto i Android, og slå kalendersynkronisering til. Giv Min Dag læseadgang, og vælg de fælles kalendere under **Indstillinger** på fællesoversigten.
 4. Vælg en fælles vejrby i **Indstillinger**. Appen henter prognoser fra Open-Meteo.
 
-Kropskortet har forside, bagside og nærbilleder af hoved, ryg, hænder og fødder. Smerter kan registreres flere gange om dagen med styrke, varighed, tidspunkt og note. Trivsel, søvn og menstruation kan registreres på tidligere datoer og redigeres i **Historik**. Efter en gemt registrering åbner fællesoversigten med dagens vejr og aftaler. **Rapport** viser en valgt periode og gemmer den som PDF via Androids filvælger. Cyklus og noter tilvælges i rapporten.
+Kropskortet har forside, bagside og nærbilleder af hoved, ryg, hænder og fødder. Smerter kan registreres flere gange om dagen med styrke, varighed, klokkeslæt i 24-timers format og note. Trivsel, søvn og menstruation kan registreres på tidligere datoer og redigeres i **Historik**. Efter en gemt registrering åbner den aktive profil igen. Efter to minutters inaktivitet åbner fællesoversigten med dagens vejr, aftaler og profilvalg. **Rapport** viser en valgt periode og gemmer den som PDF via Androids filvælger. Cyklus og noter tilvælges i rapporten.
 
 Hver profil har separat historik. Registreringerne gemmes lokalt og krypteres med en nøgle i Android Keystore. APK-opdateringer skal signeres med den samme nøgle for at kunne installeres oven på en eksisterende version. Afinstallation sletter de lokale data. Kalenderen læser aftaler fra Androids synkroniserede kalendere, og vejr kræver internet.
 
